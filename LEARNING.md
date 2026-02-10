@@ -1,4 +1,4 @@
-**# Purpose
+# Purpose
 
 This file is used to track what I learn while working on this project, including my thought process, experiments, mistakes, and insights as my understanding of networking and TCP grows.
 
@@ -201,7 +201,7 @@ field-name: value\r\n
 - stands for client URL
 - is a command line tool for making http requests.
 
-# Request Lines
+# CHAPTER 4: Request Lines
 
 I created a simple test file for request parsing.
 In this project, I am not using table-driven tests.
@@ -252,9 +252,17 @@ POST /rice HTTP/1.1
 GET /index.html HTTP/1.1
 ```
 
+### What I Learned from RFC 9112 Section 3:
+
+- Request line must be: `METHOD SP request-target SP HTTP-version CRLF`
+- Methods are case-sensitive (GET not get)
+- Only single space (SP) allowed between components
+- Must end with `\r\n` (CRLF)
+-
+
 ## Parsing Strategy
 
-To begin parsing, I created a function called ParseRequestLine.
+To begin parsing, I created a function called `ParseRequestLine`.
 
 This function:
 
@@ -278,10 +286,11 @@ This allows the parser to:
 > Note:
 >
 > Request line is composed of three components
+>
 > - Method
 > - RequestTarget
 > - HTTPVersion
-> 
+>
 > Components are separated by space and not tabs
 >
 > The line must end by CRLF( **\r\n** ). Prime calls this “registered nurse”, which is honestly kind of funny
@@ -405,15 +414,17 @@ What really matters is how many bytes were:
 
 - read
 - parsed
-- left unparsed and shifted forward for the next read**
+- left unparsed and shifted forward for the next read\*\*
 
 # Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
-- Thought UDP might be “unreliable” for all small messages → realized some apps handle reliability at the application layer.
-- In the third lesson of request, i thought 0 and nil represents failure but its more like "needs more data"
+- Thought UDP might be "unreliable" for all small messages → realized some apps handle reliability at the application layer.
+- In the third lesson of request, I thought 0 and nil represents failure but it's more like "needs more data"
 - Buffer size is not equal to data size
-- Parsing is incremental , not "loop through buffer"
+- Parsing is incremental, not "loop through buffer"
+- Confused "pull vs push" → really about synchronous (files) vs asynchronous (network) data availability
+- Initially said "TCP splits into packets" → learned TCP creates segments, IP creates packets
 
 # Security Insights
 
