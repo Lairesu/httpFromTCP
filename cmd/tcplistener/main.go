@@ -2,47 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"httpfromtcp/internal/request"
 	"net"
-	"strings"
 )
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	out := make(chan string, 1)
-
-	go func() {
-		defer f.Close()
-		defer close(out)
-
-		// current line buffer
-		str := ""
-		for {
-			data := make([]byte, 8)
-			n, err := f.Read(data)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			// split 8-byte chunk
-			parts := strings.Split(string(data[:n]), "\n")
-
-			for i := 0; i < len(parts)-1; i++ {
-				// fmt.Printf("read: %s\n",o str+parts[i]) // print complete line
-				out <- str + parts[i]
-				str = "" // reset buffer
-			}
-			str += parts[len(parts)-1] // last part , carried forward
-		}
-		if str != "" {
-			// fmt.Printf("read: %s\n", str)
-			out <- str
-		}
-	}()
-	return out
-}
 
 func main() {
 	Listener, err := net.Listen("tcp", ":42069")
@@ -58,8 +20,16 @@ func main() {
 		if err != nil {
 			fmt.Println(err)
 		}
-		for line := range getLinesChannel(conn) {
-			fmt.Printf("read: %s\n", line)
+
+		// calling RequestFromReader
+		r, err := request.RequestFromReader(conn)
+		if err != nil {
+			fmt.Println(err)
 		}
+
+		fmt.Printf("Request Line:\n")
+		fmt.Printf("- Method: %s\n", r.RequestLine.Method)
+		fmt.Printf("- Targe: %s\n", r.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
 	}
 }
