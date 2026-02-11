@@ -414,7 +414,208 @@ What really matters is how many bytes were:
 
 - read
 - parsed
-- left unparsed and shifted forward for the next read\*\*
+- left unparsed and shifted forward for the next read
+
+### Reading vs Parsing
+
+**Reading** is moving data from the reader into our program.
+
+**Parsing** is interpreting that data — for example, transforming raw `[]byte` into a `RequestLine` struct.
+
+> Note: once the data is parse we can discard it from buffer to save memory.
+
+## State Machine
+
+A state machine is a system that can be in one of many possible states, and its behavior depends on its current state.
+
+```
+func add(a, b int) int {
+  return a + b
+}
+```
+
+The example above is **not** state machine as it does not have any internal state.t does not maintain any internal state. It takes two inputs and returns a result without remembering anything.
+
+```
+type Counter struct {
+  count int
+}
+
+func (c *counter) Add(a int) int {
+  c.count += a
+  return c.count
+}
+```
+
+This example has internal state (`count`). Each time we call Add, it changes the state of the `Counter`. The output depends not only on the input, but also on the current internal state. Therefore, it is stateful.
+
+## Connect the Parsing
+
+In this lesson, I felt like I built something real. It almost felt like magic.
+
+I sent a `curl` request from one terminal, and on the other side I could see the parsed request line — even though it was just `localhost`. I could see exactly what was being sent and how it was interpreted.
+
+In the first chapter, I was reading messages from files and processing them.
+
+In the second chapter, I switched to reading data from the network. I was receiving raw bytes over TCP and processing them.
+
+But in the fourth chapter, something changed. Instead of just reading lines, I parsed the HTTP start line and extracted its three components:
+
+- Method
+- Target
+- Version
+
+Previously, I was using a `GetLineChannel` function that only split input by newline.
+
+This time, I removed that function and replaced it with my own `RequestFromReader` function. Instead of just printing a raw line, I parsed the request into a structured `RequestLine` and printed it like this:
+
+```
+Request line:
+- Method: GET
+- Target: /
+- Version: 1.1
+```
+
+That’s when it clicked — I wasn’t just reading data anymore. I was interpreting a protocol.
+
+### I moved from:
+
+**Text Processing**
+
+" Read a line, Print a line "
+
+**To**
+
+**Protocol Parsing**
+
+" Read a byte stream, Interpret structured meaning"
+
+### Before and After
+
+**Before**:
+
+```
+Network → Read → Split on newline → Print
+```
+
+**After**:
+
+```
+Network → Read (stream) → State Machine → Structured Data → Print
+
+```
+
+`I moved from reading lines to parsing protocols.`
+
+# CHAPTER 5: HTTP Headers
+
+**Headers** , a metadata fields that accompany HTTP requests and responses.
+
+The RFC does not call them header, The RFC uses the term `Field-line`
+
+> Each field line consists of a case-insensitive field name followed by a colon (`":"`), optional leading whitespace, the field line value, and optional trailing whitespace."
+
+```
+field-line   = field-name ":" OWS field-value OWS
+```
+
+There can be an unlimited amount of whitespace before and after the `field-value`. However, when parsing a `field-name`, there must be no space betwixt the colon and the `field-name`.In other words, these are valid:
+
+```
+'Host: localhost:42069'
+'          Host: localhost:42069    '
+```
+
+But this is not:
+
+```
+Host : localhost:42069
+```
+
+## Header Parser — My Learning
+
+Creating the Headers parser gave me quite a few hiccups — I was stuck for a long time.
+
+Here’s how I approached it:
+
+### setup
+
+- I was given a `Headers` type (a `map[string]string`) and a `Parse` function which returns (int, bool, error).
+
+- I set a global variable `rn` to represent `CRLF` (`\r\n`).
+
+- Similar to the `RequestLine` parser, I created:
+  - a `read` variable to track how many bytes I have already consumed
+
+  - a loop to iterate through the data
+
+  - an index `i` to find the next CRLF
+
+### Handling Incomplete Data
+
+- While reading, I check for CRLF in the current unparsed slice:
+
+```
+i := bytes.Index(data[read:], rn)
+if i == -1 {
+    break // need more data
+}
+
+  - data -> the full byte slice i got from the network
+  - read -> how many bytes i have already parsed and consumed
+  - i    -> index of the next \r\n in the current unparsed slice
+```
+
+- If no CRLF is found, the parser cannot continue yet, so we wait for more data and parse again.
+
+### Detecting End of Headers
+
+- If we find an empty line (i.e., i == 0), it means we’ve reached the end of headers:
+
+```
+if i == 0 {
+    done = true
+    read += len(rn)
+    break
+}
+
+```
+
+- We advance the `read` counter to consume the empty line and signal to the caller that headers are finished.
+
+### parsing One Header Line
+
+- We take one header line from the buffer:
+
+```
+name, value, err := parseHeader(data[read:read+i])
+if err != nil {
+return 0, false, err
+}
+```
+
+- parseHeader splits the line into name and value, trims whitespace, and immediately handles malformed headers.
+
+- data[read:read+i] is exactly one header line without the trailing CRLF.
+
+- Then we advance the read pointer:
+
+```
+read += i + len(rn) // move past this line
+```
+
+- After parsing, we store the header in the map:
+
+```
+h[name] = value
+```
+
+Example:
+
+```
+h["Host"] = "example.com"
+h["User-Agent"] = "curl/8.0"
+```
 
 # Mistakes & Realizations
 
@@ -425,6 +626,20 @@ What really matters is how many bytes were:
 - Parsing is incremental, not "loop through buffer"
 - Confused "pull vs push" → really about synchronous (files) vs asynchronous (network) data availability
 - Initially said "TCP splits into packets" → learned TCP creates segments, IP creates packets
+
+**Chapter 5**
+
+Lesson 1
+
+- Partial reads are normal over TCP — your parser must handle them.
+
+- Empty line detection is key to know when headers are done.
+
+- Advancing the read pointer after each line prevents parsing the same line twice.
+
+- Immediate error handling ensures malformed headers don’t propagate.
+
+- This pattern — loop → find CRLF → parse line → advance read → store — is exactly how production HTTP parsers work.
 
 # Security Insights
 
