@@ -3,7 +3,29 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
+
+// tokens
+func isToken(str []byte) bool {
+	for _, ch := range str {
+		found := false
+		if ch >= 'A' && ch <= 'Z' ||
+			ch >= 'a' && ch <= 'z' ||
+			ch >= '0' && ch <= '9' {
+			found = true
+		}
+
+		switch ch {
+		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+			found = true
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
 
 var rn = []byte("\r\n")
 
@@ -27,7 +49,12 @@ func parseHeader(fieldLine []byte) (string, string, error) {
 		return "", "", fmt.Errorf("Malformed field name")
 	}
 
-	return string(name), string(value), nil
+	// at least 1 character
+	if len(name) == 0 {
+		return "", "", fmt.Errorf("Malformed Header field-name (token should have at least one character)")
+	}
+
+	return strings.ToLower(string(name)), string(value), nil
 }
 
 func (h Headers) Parse(data []byte) (int, bool, error) {
@@ -46,11 +73,18 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 			break
 		}
 
-		name, value, err := parseHeader(data[read:read+i])
+		name, value, err := parseHeader(data[read : read+i])
 		if err != nil {
 			return 0, false, err
 		}
+
+		// checking if token contains the must things
+		if !isToken([]byte(name)) {
+			return 0, false, fmt.Errorf("Malformed Header field-name")
+		}
 		read += i + len(rn)
+
+		// field-name are case insensitivity
 		h[name] = value
 	}
 

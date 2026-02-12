@@ -617,6 +617,34 @@ h["Host"] = "example.com"
 h["User-Agent"] = "curl/8.0"
 ```
 
+## Constraints
+
+The header parsing mostly working but not according to RFC
+
+### Case Insensitivity
+
+Field names are case-insensitive so Content-Length and content-length are the same and we have to account for this.
+
+### Valid Characters
+
+Field-name has implicit definition of a token, as defined in RFC 9110, TOken are short textual identifiers that do not include whitespace or delimiters.
+
+```
+token          = 1*tchar
+
+  tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+                 / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+                 / DIGIT / ALPHA
+                 ; any VCHAR, except delimiters
+```
+
+so, a `field-name` must only contain:
+
+- Uppercase Letters A-Z
+- Lowercase Letters a-z
+- Digits: 0-9
+- Special characters: ``!, #, $, %, &, ', *, +, -, ., ^, _, `, |, ~``
+
 # Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
@@ -638,8 +666,6 @@ Lesson 1
 - Advancing the read pointer after each line prevents parsing the same line twice.
 
 - Immediate error handling ensures malformed headers don’t propagate.
-
-- This pattern — loop → find CRLF → parse line → advance read → store — is exactly how production HTTP parsers work.
 
 # Security Insights
 
