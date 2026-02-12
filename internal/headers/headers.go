@@ -27,16 +27,10 @@ func isToken(str []byte) bool {
 	return true
 }
 
-var rn = []byte("\r\n")
-
-type Headers map[string]string
-
-func NewHeaders() Headers {
-	return map[string]string{}
-}
-
 func parseHeader(fieldLine []byte) (string, string, error) {
 	parts := bytes.SplitN(fieldLine, []byte(":"), 2)
+	// fmt.Printf("fieldLine: %q\n", string(fieldLine))
+	// fmt.Printf("parts count: %d\n", len(parts))
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("Malformed field line")
 	}
@@ -54,9 +48,40 @@ func parseHeader(fieldLine []byte) (string, string, error) {
 		return "", "", fmt.Errorf("Malformed Header field-name (token should have at least one character)")
 	}
 
-	return strings.ToLower(string(name)), string(value), nil
+	return string(name), string(value), nil
 }
 
+var rn = []byte("\r\n")
+
+type Headers struct {
+	headers map[string]string
+}
+
+func NewHeaders() *Headers {
+	return &Headers{
+		headers: map[string]string{},
+	}
+}
+
+func (h *Headers) Get(name string) string {
+	return h.headers[strings.ToLower(name)]
+}
+
+func (h *Headers) Set(name, value string) {
+	name = strings.ToLower(name)
+
+	if v, ok := h.headers[name]; ok {
+		h.headers[name] = fmt.Sprintf("%s,%s", v, value)
+	} else {
+		h.headers[name] = value
+	}
+}
+
+func (h *Headers) ForEach(cb func(n, v string)) {
+	for n, v := range h.headers {
+		cb(n, v)
+	}
+}
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false
@@ -85,7 +110,7 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 		read += i + len(rn)
 
 		// field-name are case insensitivity
-		h[name] = value
+		h.Set(name, value)
 	}
 
 	return read, done, nil

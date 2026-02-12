@@ -645,6 +645,91 @@ so, a `field-name` must only contain:
 - Digits: 0-9
 - Special characters: ``!, #, $, %, &, ', *, +, -, ., ^, _, `, |, ~``
 
+## Multiple Values
+
+According to RFC: 9110, in **[5.2](https://datatracker.ietf.org/doc/html/rfc9110#name-field-lines-and-combined-fi)** it is mentioned, that its is perfectly valid to have multiple values for single header key.
+for example:
+
+```
+Example-Field: Foo, Bar
+Example-Field: Baz
+```
+
+## Add to Parse
+
+While adding to my Parse function, I ran into a few problems , similar to what the video course showed — where my code panicked multiple times.
+
+The causes were tiny mistakes, like:
+
+- Adding extra spaces while testing
+
+- Miscalculating the number of bytes to slice
+
+### Using slog for Debugging
+
+I discovered slog for structured logging, which I found very helpful. I used it multiple times in my code to debug issues like this:
+
+```
+// debugging
+slog.Info("Read from reader",
+    "n", n,
+    "bufLen", bufLen,
+)
+
+readN, err := request.parse(buf[:bufLen])
+if err != nil {
+    return nil, err
+}
+
+// debugging
+if readN > bufLen {
+    slog.Info("Parse returned more than buffer length",
+        "readN", readN,
+        "bufLen", bufLen,
+    )
+    return nil, fmt.Errorf("parse returned readN > bufLen: %d > %d", readN, bufLen)
+}
+```
+
+- The first log shows how many bytes were read and the current buffer length.
+
+- After parsing, the second log checks if `parse` returned more bytes than the buffer length, which could indicate a bug.
+
+### What I Learned
+
+The panic happened because of Go slice rules:
+
+```
+buf[:bufLen+n] // This caused panic
+```
+
+- `bufLen` already includes the newly read bytes
+
+- By adding `n` again, I doubled the length, making the start index larger than the end index → slice panic
+
+In simple terms:
+
+> My start index was greater than my end index because I incremented `bufLen` before slicing and then added `n` again.
+
+## Live headers
+
+I was starting to really understand how HTTP headers work, how they are parsed, and what constraints they must follow according to the RFCs.
+
+- I could see live headers coming from my curl requests in real time.
+
+- I saw exactly how each header line was split into name and value, and how the parser enforced rules:
+  - No spaces in the field name
+
+  - Optional whitespace around the value
+
+  - Empty line marking the end of headers
+
+This was the moment everything clicked:
+
+> I wasn’t just reading data or parsing lines anymore It  was interpreting structured protocol data live, exactly like a real HTTP server does.
+
+I got full insight into why headers are structured the way they are, and how incremental parsing, CRLF detection, and buffer management all work together.
+
 # Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
@@ -666,6 +751,11 @@ Lesson 1
 - Advancing the read pointer after each line prevents parsing the same line twice.
 
 - Immediate error handling ensures malformed headers don’t propagate.
+
+Lesson 4
+
+- Structured logging (slog) is incredibly useful for debugging incremental parsing.
+- Small mistakes (extra space, wrong byte count) can cause panics in network parsers.
 
 # Security Insights
 

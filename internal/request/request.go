@@ -3,18 +3,22 @@ package request
 import (
 	"bytes"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"io"
+	"log/slog"
 )
 
 type parserState string
 
 const (
-	StateInit parserState = "initialized"
-	StateDone parserState = "done"
+	StateInit    parserState = "initialized"
+	StateHeaders parserState = "headers"
+	StateDone    parserState = "done"
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     *headers.Headers
 	state       parserState
 }
 
@@ -69,9 +73,10 @@ func (r *Request) parse(data []byte) (int, error) {
 	read := 0
 outer:
 	for {
+		currentData := data[read:]
 		switch r.state {
 		case StateInit:
-			rl, n, err := parseRequestLine(data[read:])
+			rl, n, err := parseRequestLine(currentData)
 			if err != nil {
 				return 0, err
 			}
@@ -83,9 +88,26 @@ outer:
 			r.RequestLine = *rl
 			read += n
 
-			r.state = StateDone
+			r.state = StateHeaders
+
+		case StateHeaders:
+			n, done, err := r.Headers.Parse(currentData)
+			if err != nil {
+				return 0, err
+			}
+			if n == 0 {
+				break outer
+			}
+
+			read += n
+
+			if done {
+				r.state = StateDone
+			}
 		case StateDone:
 			break outer
+		default:
+			panic("You are failure")
 		}
 	}
 	return read, nil
@@ -98,7 +120,8 @@ func (r *Request) done() bool {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := &Request{
-		state: StateInit,
+		state:   StateInit,
+		Headers: headers.NewHeaders(),
 	}
 
 	buf := make([]byte, 1024)
@@ -110,10 +133,27 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, err
 		}
 		bufLen += n
-		readN, err := request.parse(buf[:bufLen+n])
+
+		// debugging
+		slog.Info("Read from reader",
+			"n", n,
+			"bufLen", bufLen,
+		)
+
+		readN, err := request.parse(buf[:bufLen])
 		if err != nil {
 			return nil, err
 		}
+
+		// debugging
+		if readN > bufLen {
+			slog.Info("Parse returned more than buffer length",
+				"readN", readN,
+				"bufLen", bufLen,
+			)
+			return nil, fmt.Errorf("parse returned readN > bufLen: %d > %d", readN, bufLen)
+		}
+
 		copy(buf, buf[readN:bufLen])
 		bufLen -= readN
 
