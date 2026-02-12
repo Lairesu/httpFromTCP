@@ -3,7 +3,7 @@
 ## This repository contains my personal course project from boot.dev
 
 
-## Note: This is not an original project — all code and exercises are from the course.
+## Note: This is not an original project.
 
 ### I am learning everything step by step and keeping detailed notes in LEARNING.md.
 
