@@ -1,0 +1,14 @@
+# Compiled binaries
+*.exe
+*.out
+*.exe~
+*.test
+
+# Vendor directory if you don't want to commit dependencies
+/vendor/
+
+# OS / Editor files
+.DS_Store
+*.swp
+*.idea/
+*.vscode/
