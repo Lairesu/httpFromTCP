@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"httpfromtcp/internal/headers"
 	"io"
-	"log/slog"
 )
 
 type parserState string
@@ -13,6 +12,7 @@ type parserState string
 const (
 	StateInit    parserState = "initialized"
 	StateHeaders parserState = "headers"
+	StateBody    parserState = "body"
 	StateDone    parserState = "done"
 )
 
@@ -20,6 +20,7 @@ type Request struct {
 	RequestLine RequestLine
 	Headers     *headers.Headers
 	state       parserState
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -74,6 +75,9 @@ func (r *Request) parse(data []byte) (int, error) {
 outer:
 	for {
 		currentData := data[read:]
+		if len(currentData) == 0 {
+			break outer
+		}
 		switch r.state {
 		case StateInit:
 			rl, n, err := parseRequestLine(currentData)
@@ -102,8 +106,29 @@ outer:
 			read += n
 
 			if done {
+				length := headers.GetInt(r.Headers, "content-length", 0)
+				if length > 0 {
+					r.state = StateBody
+				} else {
+					r.state = StateDone
+				}
+			}
+
+		case StateBody:
+			length := headers.GetInt(r.Headers, "content-length", 0)
+			if length == 0 {
+				r.state = StateDone
+				break
+			}
+			//
+			remainingData := min(length-len(r.Body), len(currentData))
+			r.Body = append(r.Body, currentData[:remainingData]...)
+			read += remainingData
+
+			if len(r.Body) == length {
 				r.state = StateDone
 			}
+
 		case StateDone:
 			break outer
 		default:
@@ -122,6 +147,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	request := &Request{
 		state:   StateInit,
 		Headers: headers.NewHeaders(),
+		Body:    []byte{},
 	}
 
 	buf := make([]byte, 1024)
@@ -134,26 +160,34 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 		bufLen += n
 
-		// debugging
-		slog.Info("Read from reader",
-			"n", n,
-			"bufLen", bufLen,
-		)
+		// // debugging
+		// slog.Info("Read from reader",
+		// 	"n", n,
+		// 	"bufLen", bufLen,
+		// )
 
 		readN, err := request.parse(buf[:bufLen])
 		if err != nil {
 			return nil, err
 		}
 
-		// debugging
-		if readN > bufLen {
-			slog.Info("Parse returned more than buffer length",
-				"readN", readN,
-				"bufLen", bufLen,
-			)
-			return nil, fmt.Errorf("parse returned readN > bufLen: %d > %d", readN, bufLen)
+		// // debugging
+		// if readN > bufLen {
+		// 	slog.Info("Parse returned more than buffer length",
+		// 		"readN", readN,
+		// 		"bufLen", bufLen,
+		// 	)
+		// 	return nil, fmt.Errorf("parse returned readN > bufLen: %d > %d", readN, bufLen)
+		// }
+
+		if err == io.EOF && !request.done() {
+			return nil, fmt.Errorf("unexpected EOF: request incomplete")
 		}
 
+		if readN == 0 && n == 0 {
+			// Prevent infinite loop: no progress made
+			return nil, fmt.Errorf("no progress parsing request, need more data")
+		}
 		copy(buf, buf[readN:bufLen])
 		bufLen -= readN
 

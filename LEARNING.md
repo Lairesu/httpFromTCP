@@ -726,9 +726,22 @@ I was starting to really understand how HTTP headers work, how they are parsed, 
 
 This was the moment everything clicked:
 
-> I wasn’t just reading data or parsing lines anymore It  was interpreting structured protocol data live, exactly like a real HTTP server does.
+> I wasn’t just reading data or parsing lines anymore It was interpreting structured protocol data live, exactly like a real HTTP server does.
 
 I got full insight into why headers are structured the way they are, and how incremental parsing, CRLF detection, and buffer management all work together.
+
+# CHAPTER 6: HTTP Body
+
+An HTTP/1.1 message consists of a start line followed by a CRLF and sequence of octets in a format similar to Internet Message Format: zero or more header field lines (collectively referred to as "headers" or the "header section"), an empty line indicating the end of header section and optional message body.
+
+```
+  HTTP-message   = start-line CRLF
+                   *( field-line CRLF )
+                   CRLF
+                   [ message-body ]
+```
+
+A message can be either a request from client ot a server or response from server to client.Syntactically, the two types of messages differ only in the start-line(for response) and in the algorithm for determining the length of the message body.
 
 # Mistakes & Realizations
 

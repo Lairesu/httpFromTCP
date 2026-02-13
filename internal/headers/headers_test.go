@@ -14,8 +14,10 @@ func TestHeaderParse(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers.Get("HOST"))
-	assert.Equal(t, "bar", headers.Get("Foo"))
+	value, _ := headers.Get("HOST")
+	assert.Equal(t, "localhost:42069", value)
+	value, _ = headers.Get("Foo")
+	assert.Equal(t, "bar", value)
 	assert.Equal(t, 41, n)
 	assert.True(t, done)
 
@@ -40,17 +42,20 @@ func TestHeaderParse(t *testing.T) {
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069,localhost:42068", headers.Get("HOST"))
+	value, _ = headers.Get("HOST")
+	assert.Equal(t, "localhost:42069,localhost:42068", value)
 	assert.Equal(t, 48, n)
 	assert.True(t, done)
 
-	// Test: Multiple different headers 
-    headers = NewHeaders()
-    data = []byte("Host: localhost\r\nUser-Agent: Go\r\n\r\n")
-    n, done, err = headers.Parse(data)
-    require.NoError(t, err)
-    assert.True(t, done)
-    assert.Equal(t, "localhost", headers.Get("host"))
-    assert.Equal(t, "Go", headers.Get("user-agent"))
-	
+	// Test: Multiple different headers
+	headers = NewHeaders()
+	data = []byte("Host: localhost\r\nUser-Agent: Go\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	assert.True(t, done)
+	value, _ = headers.Get("host")
+	assert.Equal(t, "localhost", value)
+	value, _ = headers.Get("user-agent")
+	assert.Equal(t, "Go", value)
+
 }
