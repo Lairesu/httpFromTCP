@@ -732,7 +732,15 @@ I got full insight into why headers are structured the way they are, and how inc
 
 # CHAPTER 6: HTTP Body
 
-An HTTP/1.1 message consists of a start line followed by a CRLF and sequence of octets in a format similar to Internet Message Format: zero or more header field lines (collectively referred to as "headers" or the "header section"), an empty line indicating the end of header section and optional message body.
+An HTTP/1.1 message consists of:
+
+- A start-line
+- Followed by CRLF
+- Zero or more header field lines
+- An empty line (CRLF)
+- An optional message body
+
+From the RFC:
 
 ```
   HTTP-message   = start-line CRLF
@@ -741,7 +749,141 @@ An HTTP/1.1 message consists of a start line followed by a CRLF and sequence of 
                    [ message-body ]
 ```
 
-A message can be either a request from client ot a server or response from server to client.Syntactically, the two types of messages differ only in the start-line(for response) and in the algorithm for determining the length of the message body.
+A message can be.
+
+- A **request** (client -> server)
+- A **Response** (server -> client)
+
+Syntactically, they are almost identical.
+The main difference is:
+
+- The `start-line`
+- The `field-line`(headers)
+- The extra `CRLF` separating headers an body
+  Now I need to parse the **Message Body**
+
+There are many edge cases
+
+According to RFC 9110 (**[section 8.6)](https://datatracker.ietf.org/doc/html/rfc9110#section-8.6)**)
+
+> A user agent should send Content-Length in a request when the method defines a meaning for enclosed content and it is not sending Transfer-Encoding.
+
+In my Implementation:
+
+- If there is no `Content-Length` header -> I assume there is **no body**.
+- If `Content-Length` exists -> I must read exactly the many bytes
+
+## Setup
+
+To support body parsing:
+
+- I update `(r *Request)`
+- Added a new state in the state machine: `StateBody`
+- Added a `.Body` field to the `Request` struct (type: `[]byte`)
+
+Code:
+
+```
+type Request struct {
+    RequestLine RequestLine
+    Headers     Headers
+    Body        []byte
+    state       parserState
+}
+```
+
+## Parsing Strategy
+
+1. Parse headers.
+2. Extract Content-Length using GetInt.
+3. Store that value as length.
+4. If length == 0 → there is no body.
+5. Otherwise:
+
+- Read incrementally from the stream.
+- Append only what is needed.
+- Stop once total body size equals Content-Length.
+
+Because TCP is a stream:
+
+- I might not receive the entire body in one read.
+- I must handle partial body reads.
+
+## Core Logic
+
+```
+remainingData := min(length - len(r.Body), len(currentData))
+```
+
+where:
+
+- `length` -> Total body size required (from `Content-Length`)
+
+- `len(r.Body)` -> How many bytes you've already collected
+
+- `length - len(r.Body)` -> How many bytes are still missing
+
+- `len(currentData)` -> How many bytes are available right now in this chunk
+
+- min(...) ensures:
+  - I never read more than required
+  - I never read more than what i currently have
+  - I respect exact body size defined by `Content-Length`
+
+### Example
+
+suppose:
+
+```
+Content-Length: 10
+```
+
+**First read:**
+
+Get 6 bytes:
+
+```
+len(r.Body) = 0
+len(currentData) = 6
+```
+
+so:
+
+```
+length - len(r.Body) = 10 - 0 = 10
+min(10, 6) = 6
+```
+
+**Second Read:**
+
+I get 10 more bytes:
+
+```
+len(r.Body)  = 0
+len(currentData) = 10
+```
+
+Now:
+
+```
+length - len(r.Boy) = 10 - 6 = 4
+min(4, 10) = 4
+```
+
+you ony append 4 bytes. Even though i received 10 bytes
+Because the body should only be 10 total
+
+## Appending the Body
+
+```
+r.Body = append(r.Body, currentData[:remainingData]...)
+```
+
+Why This?:
+
+- HTTP bodies are raw bytes.
+- Converting to string is unnecessary.
+- `append` avoids extra allocations and conversions
 
 # Mistakes & Realizations
 
@@ -769,6 +911,14 @@ Lesson 4
 
 - Structured logging (slog) is incredibly useful for debugging incremental parsing.
 - Small mistakes (extra space, wrong byte count) can cause panics in network parsers.
+
+**Chapter 6**
+
+- Parsing the body is different from parsing headers:
+  - Headers are line-based
+  - Body is **byte-count based**
+- Headers stop at `\r\n\r\n`, Body stops at exact byte count
+- Header is delimiter-base and Body is length-based
 
 # Security Insights
 
