@@ -878,12 +878,10 @@ Because the body should only be 10 total
 ```
 r.Body = append(r.Body, currentData[:remainingData]...)
 ```
-
 Why This?:
-
 - HTTP bodies are raw bytes.
 - Converting to string is unnecessary.
-- `append` avoids extra allocations and conversions
+- ``append`` avoids extra allocations and conversions
 
 # Mistakes & Realizations
 
@@ -913,13 +911,11 @@ Lesson 4
 - Small mistakes (extra space, wrong byte count) can cause panics in network parsers.
 
 **Chapter 6**
-
-- Parsing the body is different from parsing headers:
+- Parsing the body is different from parsing headers: 
   - Headers are line-based
   - Body is **byte-count based**
-- Headers stop at `\r\n\r\n`, Body stops at exact byte count
+- Headers stop at ``\r\n\r\n``, Body stops at exact byte count
 - Header is delimiter-base and Body is length-based
-
 # Security Insights
 
 - TCP’s connection-oriented nature is reliable, but also vulnerable to SYN flood attacks.
