@@ -885,6 +885,235 @@ Why This?:
 - Converting to string is unnecessary.
 - `append` avoids extra allocations and conversions
 
+# CHAPTER 7: HTTP Response
+
+Now I understand what an HTTP request is.
+
+A request is a structured block of text that contains:
+
+- A start line (request line)
+- Headers (field-lines)
+- An optional body
+
+When a client sends a request, it travels through multiple layers of the network stack and eventually reaches the destination server.
+
+Example HTTP request
+
+```
+GET /coffee.html HTTP/1.1
+User-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)
+Host: www.coffee.com
+Accept-Language: en-us
+Accept-Encoding: gzip, deflate
+Connection: Keep-Alive
+Content-Length: 23
+
+{
+  "coffee": "is good"
+}
+
+```
+
+so when this request reaches the server, server parses the status line , like asking to server, "hey server, i need to route out to this place" and server parses all the things , queries, headers and things, and server will be going to either a database, third party services like aws or any GPT to get `response` back and that response is sent back with response message which has similar structure to request where it has status line, field lines and response body, as follows:
+
+`What Happens on the Server
+
+When the request reaches the server:
+
+1. The server parses the request line:
+   - Method (`GET`)
+
+   - Target (`/coffee.html`)
+
+   - Version (`HTTP/1.1`)
+
+2. The server parses all headers.
+
+3. If a body exists (based on `Content-Length` or `Transfer-Encoding`), it reads the body.
+
+4. The server then decides what to do:
+   - Route to a handler
+
+   - Query a database
+
+   - Call third-party services (e.g., cloud services, APIs)
+
+   - Perform internal logic
+
+After processing, the server sends back a `response`.
+
+## HTTP Response structure
+
+An HTTP response has a very similar structure:
+
+- A status line
+
+- Headers (field-lines)
+
+- An empty line
+
+- An optional response body
+
+Example:
+
+```
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Age: 294510
+Cache-Control: max-age=604800
+Content-Type: text/html; charset=UTF-8
+Date: Fri, 21 Jun 2024 14:18:33 GMT
+Etag: "3147526947"
+Expires: Fri, 28 Jun 2024 14:18:33 GMT
+Last-Modified: Thu, 17 Oct 2019 07:18:26 GMT
+Server: ECAcc (nyd/D10E)
+X-Cache: HIT
+Content-Length: 1256
+
+Coffee is good!
+```
+
+- `TTP/1.1` → Version
+- `200` → Status code
+- `OK` → Reason phrase
+
+Common status codes:
+
+- `200 OK` → Success
+- `404 Not Found` → Resource does not exist
+- `500 Internal Server Error` → Server failed to handle request
+
+**The Request/Response Model:**
+
+```
+Client → HTTP Request → Server
+Server → HTTP Response → Client
+```
+
+## Server
+
+Now I am upgrading from a simple `tcplistener` to an actual `httpserver.`
+
+Previously, I was:
+
+- Reading a single line
+- Reading data from a file
+- Reading raw bytes from a TCP connection
+
+Now, I am moving to the next level:
+
+Building a server that:
+
+- Accepts valid HTTP requests
+- Parses them correctly
+- Sends back valid HTTP responses
+
+### Server Setup
+
+I was given `cmd/httpserver/main.go` file:
+
+```
+const port = 42069
+
+func main() {
+	server, err := server.Serve(port)
+	if err != nil {
+		log.Fatalf("Error starting server: %v", err)
+	}
+	defer server.Close()
+	log.Println("Server started on port", port)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+	log.Println("Server gracefully stopped")
+}
+```
+
+This file:
+
+- starts the server in `42069`
+- waits for the system signals(`SIGINT`/`SIGTERM`) to gracefully stop
+- Calls `server.Close()` on exit
+
+### creating server
+
+Inside my `server` package, i implemented following things:
+
+1. `type Server struct`
+
+```
+type Server struct {
+	listener net.Listener
+}
+  - Keeps track of the server state
+  - stores the TCP listener
+```
+
+2. `func Serve(port int) (*server, error)`
+
+```
+func Serve(port int) (*Server, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, err
+	}
+
+	server := &Server{
+		listener: listener,
+	}
+
+	go server.Listen()
+	return server, nil
+}
+```
+
+- Creates a TCP listener
+- Instantiates a new `server`
+- starts the `Listen` loop in a goroutine
+- returns the server instance
+
+3. `func(s *server) Close() error`
+
+- Closes the TCP Listener
+- Sets the server state so that further erros from Accepts can be ignored
+
+4. `func (s *Server) listen()`
+
+```
+func (s *Server) Listen() {
+	for {
+		conn, err := s.listener.Accept()
+		if err != nil {
+			return
+		}
+		go s.handle(conn)
+	}
+}
+```
+
+- Continuously accepts new connections
+- Each connection is handled in its own goroutine
+- Ensures the server can handle multiple simultaneous Clients
+  2
+
+5. `func (s *Server) handle(conn net.Conn)` -
+
+```
+func (s *Server) handle(conn net.Conn) {
+	out := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nHello World!")
+	conn.Write(out)
+	conn.Close()
+}
+
+```
+
+- Handles a single connection
+- Writes a raw HTTP response
+- closes the connection
+
+> As of in this stage, i am hard coding the response msg, in future will add dynamic responses
+
 # Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
@@ -919,6 +1148,15 @@ Lesson 4
   - Body is **byte-count based**
 - Headers stop at `\r\n\r\n`, Body stops at exact byte count
 - Header is delimiter-base and Body is length-based
+
+**Chapter 7**
+
+- In a request, the first line is called **request line**
+  In a response, the first line is called **status line** and it contains:
+  - HTTP version
+  - Status code
+  - Reason phrase
+- The request and response share the same high-level structure
 
 # Security Insights
 
