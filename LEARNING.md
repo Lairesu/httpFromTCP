@@ -1233,6 +1233,121 @@ At this point server response flow is:
 
 Right now the server is still fairly low-level and manual, but it correctly follows the HTTP message structure.
 
+### Handler
+
+It's time to define the handler function. This will allow the user's of our `server` package to define their own logic for handling requests:
+
+```go
+type Handler func(w io.Writer, req *request.Request) *HandlerError
+```
+
+- similar to of Go standard library:
+
+```Go
+type HandlerFunc func(w http.ResponseWriter, r *http.Request)
+```
+
+- **Difference**: I use a general io.Writer instead of http.ResponseWriter for simplicity and flexibility.
+
+#### Implementation
+
+1. Creating `Handler` function and `HandleError`
+   ```Go
+   Type HandlerError struct {
+   	StatusCode response.StatusCode
+   	Message    string
+   }
+   type Handler func(w io.Writer, req *request.Request) *HandlerError
+   ```
+
+- `HandleError` allows the handler to return an HTTP status code and message in case of errors
+
+2. Accept `handler` in Server
+   Update `server.Serve` to accept a handler function
+
+   ```Go
+    server, err := server.Serve(port, func(w io.Writer, req *request.Request) *server.HandlerError {
+   ...
+   }
+   ```
+
+3. The server now uses the handler to process requests and generate responses:
+
+```go
+func (s *Server) handle(conn net.Conn) {
+	defer conn.Close()
+
+	headers := response.GetDefaultHeaders(0)
+
+	r, err := request.RequestFromReader(conn)
+	if err != nil {
+		response.WriteStatusLine(conn, response.StatusBadRequest)
+		response.WriteHeaders(conn, *headers)
+		return
+	}
+
+	writer := bytes.NewBuffer([]byte{})
+	handlerError := s.handler(writer, r)
+	if handlerError != nil {
+		// updating the body and Content-Length
+		body := []byte(handlerError.Message)
+		headers.Set("Content-Length", fmt.Sprintf("%d", len(body)))
+
+		response.WriteStatusLine(conn, handlerError.StatusCode)
+		response.WriteHeaders(conn, *headers)
+		conn.Write(body)
+		return
+	}
+
+	// 200 OK PATH
+	body := writer.Bytes()
+	headers.Set("Content-Length", fmt.Sprintf("%d", len(body)))
+
+	response.WriteStatusLine(conn, response.StatusOK)
+	response.WriteHeaders(conn, *headers)
+	conn.Write(body)
+}
+```
+
+#### Flow Explanation:
+
+- Parse the request from connection
+- if parsing fails - return **400 Bad Request**
+- Pass request to handler:
+  - if handler returns and error - > sends corresponding status + message
+  - otherwise -> write handler's response to the body and return **200 OK**
+
+1. Example Handler in `main.go`
+
+```go
+func main() {
+	server, err := server.Serve(port, func(w io.Writer, req *request.Request) *server.HandlerError {
+		if req.RequestLine.RequestTarget == "/yourproblem" {
+			return &server.HandlerError{
+				StatusCode: response.StatusBadRequest,
+				Message:    "your problem, not my problem",
+			}
+		} else if req.RequestLine.RequestTarget == "/myproblem" {
+			return &server.HandlerError{
+				StatusCode: response.StatusInternalServerError,
+				Message:    "My bad, sorry",
+			}
+		}
+		w.Write([]byte("we all good, frfr"))
+		return nil
+	})
+  ...
+}
+```
+
+- Routes requests to different paths
+- Returns appropriate errors or writes a normal response
+
+> Note:
+>
+> The `Handler` is responsible for reporting errors or writing the
+> body.
+
 ## Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
@@ -1283,3 +1398,11 @@ Lesson 4
 - Partial read handling is important to prevent buffer overflows or request smuggling.
 
 ---
+
+```
+
+```
+
+```
+
+```
