@@ -11,7 +11,7 @@ This file is used to track what I learn while working on this project, including
 
 ---
 
-# CHAPTER 1: HTTP streams
+## CHAPTER 1: HTTP streams
 
 To simulate how the internet sends data as a stream, I created a simple scenario using a local file (`message.txt`) as the data source.  
 I wrote a program that reads the file in fixed-size chunks of 8 bytes and prints each chunk as it is received.
@@ -29,7 +29,7 @@ However, regardless of buffer size, an important insight is that a read operatio
 
 ---
 
-# CHAPTER 2: TCP (Transmission Control Protocol)
+## CHAPTER 2: TCP (Transmission Control Protocol)
 
 TCP is one of the core communication protocols of the internet.  
 Its main purpose is to provide **reliable, ordered, and error-checked** data transmission between hosts.
@@ -49,7 +49,7 @@ Without a protocol like TCP, there would be no guarantee that the received data 
 >
 > These packets are then encapsulated into frames at Layer 2 before being transmitted over the network.
 
-## From File Streams to TCP Streams
+### From File Streams to TCP Streams
 
 In earlier experiments, I simulated streaming by reading data from a local file (`message.txt`) in fixed-size chunks.  
 In this chapter, I replaced the file-based stream with a real TCP stream using Go’s standard library.
@@ -59,7 +59,7 @@ This reinforces the idea that **files and network connections can both be treate
 
 This change helped solidify my understanding that TCP provides a continuous byte stream rather than discrete messages, and that applications are responsible for parsing and reconstructing meaningful data.
 
-## TCP vs UDP
+### TCP vs UDP
 
 UDP stands for **User Datagram Protocol**.  
 TCP and UDP are both **transport-layer protocols**, but they are designed for different use cases.
@@ -84,7 +84,7 @@ the sender verifies the receiver, ensures each piece arrives correctly and in or
 **UDP**, on the other hand, simply sends data without checking whether it arrives, arrives in order, or arrives at all.  
 The responsibility for handling loss or ordering is left to the application.
 
-## easy to understand memes
+### easy to understand memes
 
 ![TCP vs UDP diagram](Images/TCPvsUDP.jpeg)
 ![TCP vs UDP diagram](Images/tcpudp.jpg)
@@ -102,7 +102,7 @@ Netcat requires a connection to be established between the sender and receiver b
 This behavior directly reflects one of TCP’s core properties: it is **connection-oriented**.  
 Data is only sent after the TCP handshake is completed, ensuring that both sides are ready to communicate reliably.
 
-## Files vs Network
+### Files vs Network
 
 One important things from this project is that **files and network connection behave very similarly**.
 I started by simple reading and writings to files, then updated my code to be a bit more abstract so it can handle both.
@@ -128,7 +128,7 @@ The core difference comes down to **pull vs push**:
 I must be ready to receive data whenever it comes and handle it correctly.  
 This distinction reinforced my understanding that **network streams are asynchronous and unpredictable**, unlike files which are synchronous and controlled.
 
-# CHAPTER 3: Requests
+## CHAPTER 3: Requests
 
 **HTTP/1.1** is a text based protocol that works over TCP
 
@@ -140,7 +140,7 @@ This distinction reinforced my understanding that **network streams are asynchro
 >
 > 9112 is Message Syntax and Routing
 
-## TCP to HTTP
+### TCP to HTTP
 
 > Why am I using HTTP and not just TCP?
 
@@ -187,7 +187,7 @@ HTTP allows us to specify a **destination within the server** and provides metad
 
 #### Formal Representation
 
-```
+```go
 METHOD /resource-path PROTOCOL-VERSION\r\n
 field-name: value\r\n
 field-name: value\r\n
@@ -196,12 +196,12 @@ field-name: value\r\n
 [message-body]
 ```
 
-## cURL
+### cURL
 
 - stands for client URL
 - is a command line tool for making http requests.
 
-# CHAPTER 4: Request Lines
+## CHAPTER 4: Request Lines
 
 I created a simple test file for request parsing.
 In this project, I am not using table-driven tests.
@@ -210,14 +210,14 @@ Following ThePrimeagen’s approach, " instead of writing tests for every functi
 
 If, in the future, something becomes unclear or error-prone, I can always add more tests.
 
-## Parsing the Request Line
+### Parsing the Request Line
 
 At this point, I already have code that handles plain-text TCP data.
 The next step is to convert that raw text into structured data, while ensuring it conforms to the HTTP/1.1 protocol as defined in RFC 9110 and RFC 9112.
 
 for example, given
 
-```
+```go
 POST /rice HTTP/1.1
 Host: localhost:42069
 User-Agent: curl;/7.81.0
@@ -229,7 +229,7 @@ content-length: 17
 
 The HTTP parser should return a struct that looks like this
 
-```
+```go
 type Request struct {
     RequestLine RequestLine
     Headers     map[string]string
@@ -237,22 +237,22 @@ type Request struct {
 }
 ```
 
-### Goal of This section
+#### Goal of This section
 
 The goal of this section is to parse the request start-line correctly, using the server’s raw input and following the HTTP message parsing rules defined in RFC 9112.
 
-```
+```go
 METHOD SP request-target SP HTTP-version CRLF
 ```
 
 > Examples
 
-```
+```go
 POST /rice HTTP/1.1
 GET /index.html HTTP/1.1
 ```
 
-### What I Learned from RFC 9112 Section 3:
+#### What I Learned from RFC 9112 Section 3
 
 - Request line must be: `METHOD SP request-target SP HTTP-version CRLF`
 - Methods are case-sensitive (GET not get)
@@ -260,7 +260,7 @@ GET /index.html HTTP/1.1
 - Must end with `\r\n` (CRLF)
 -
 
-## Parsing Strategy
+### Parsing Strategy
 
 To begin parsing, I created a function called `ParseRequestLine`.
 
@@ -295,7 +295,7 @@ This allows the parser to:
 >
 > The line must end by CRLF( **\r\n** ). Prime calls this “registered nurse”, which is honestly kind of funny
 
-### Validation & Testing
+#### Validation & Testing
 
 I implemented a parsing method for the request start-line and added targeted tests to validate edge cases, including:
 
@@ -309,7 +309,7 @@ I implemented a parsing method for the request start-line and added targeted tes
 
 - Rejecting request lines with more than three components
 
-## Parsing a Stream
+### Parsing a Stream
 
 TCP (and HTTP over TCP) is a stream-based protocol, not a message-based one.
 
@@ -319,28 +319,28 @@ Therefore, an HTTP parser must handle incomplete reads and incrementally parse i
 
 ---
 
-### Incomplete vs complete data
+#### Incomplete vs complete data
 
 Instead of receiving a full HTTP request at once, I might receive only the first few characters:
 
-**Incomplete**
+#### Incomplete
 
-```
+```bash
 GE
 ```
 
 So, I create a parser that can handle incomplete reads. It must be smart enough to know that parsing is not finished yet and keep reading until it receives the full request line:
 
-**Complete**
+#### Complete
 
-```
+```bash
 GET /rice HTTP/1.1
 
 ```
 
 ---
 
-### Old approach
+#### Old approach
 
 - `ReadAll()` → parse everything at once
 - Works in toy cases, but bad practice for real networking
@@ -356,7 +356,7 @@ GET /rice HTTP/1.1
 
 ---
 
-### New approach
+#### New approach
 
 - Read small chunks
 - Parse incrementally
@@ -364,7 +364,7 @@ GET /rice HTTP/1.1
 
 ---
 
-### About the `chunkReader` and tests
+#### About the `chunkReader` and tests
 
 - `chunkReader` simulates slow / fragmented network reads
 - Tests use:
@@ -382,7 +382,7 @@ The tests are basically saying:
 
 ---
 
-### Parser state (`initialized` / `done`)
+#### Parser state (`initialized` / `done`)
 
 - The `Request` struct becomes a small state machine
 - Two states for now:
@@ -393,7 +393,7 @@ My understanding: **track the state of the parser** so it knows whether it shoul
 
 ---
 
-### Buffer and byte tracking
+#### Buffer and byte tracking
 
 This lesson emphasizes tracking:
 
@@ -416,7 +416,7 @@ What really matters is how many bytes were:
 - parsed
 - left unparsed and shifted forward for the next read
 
-### Reading vs Parsing
+#### Reading vs Parsing
 
 **Reading** is moving data from the reader into our program.
 
@@ -424,11 +424,11 @@ What really matters is how many bytes were:
 
 > Note: once the data is parse we can discard it from buffer to save memory.
 
-## State Machine
+### State Machine
 
 A state machine is a system that can be in one of many possible states, and its behavior depends on its current state.
 
-```
+```go
 func add(a, b int) int {
   return a + b
 }
@@ -436,7 +436,7 @@ func add(a, b int) int {
 
 The example above is **not** state machine as it does not have any internal state.t does not maintain any internal state. It takes two inputs and returns a result without remembering anything.
 
-```
+```go
 type Counter struct {
   count int
 }
@@ -449,7 +449,7 @@ func (c *counter) Add(a int) int {
 
 This example has internal state (`count`). Each time we call Add, it changes the state of the `Counter`. The output depends not only on the input, but also on the current internal state. Therefore, it is stateful.
 
-## Connect the Parsing
+### Connect the Parsing
 
 In this lesson, I felt like I built something real. It almost felt like magic.
 
@@ -469,7 +469,7 @@ Previously, I was using a `GetLineChannel` function that only split input by new
 
 This time, I removed that function and replaced it with my own `RequestFromReader` function. Instead of just printing a raw line, I parsed the request into a structured `RequestLine` and printed it like this:
 
-```
+```bash
 Request line:
 - Method: GET
 - Target: /
@@ -478,36 +478,36 @@ Request line:
 
 That’s when it clicked — I wasn’t just reading data anymore. I was interpreting a protocol.
 
-### I moved from:
+#### I moved from
 
-**Text Processing**
+##### Text Processing
 
 " Read a line, Print a line "
 
-**To**
+##### To
 
-**Protocol Parsing**
+#### Protocol Parsing
 
 " Read a byte stream, Interpret structured meaning"
 
-### Before and After
+#### Before and After
 
 **Before**:
 
-```
+```bash
 Network → Read → Split on newline → Print
 ```
 
 **After**:
 
-```
+```bash
 Network → Read (stream) → State Machine → Structured Data → Print
 
 ```
 
 `I moved from reading lines to parsing protocols.`
 
-# CHAPTER 5: HTTP Headers
+## CHAPTER 5: HTTP Headers
 
 **Headers** , a metadata fields that accompany HTTP requests and responses.
 
@@ -515,24 +515,24 @@ The RFC does not call them header, The RFC uses the term `Field-line`
 
 > Each field line consists of a case-insensitive field name followed by a colon (`":"`), optional leading whitespace, the field line value, and optional trailing whitespace."
 
-```
+```bash
 field-line   = field-name ":" OWS field-value OWS
 ```
 
 There can be an unlimited amount of whitespace before and after the `field-value`. However, when parsing a `field-name`, there must be no space betwixt the colon and the `field-name`.In other words, these are valid:
 
-```
+```bash
 'Host: localhost:42069'
 '          Host: localhost:42069    '
 ```
 
 But this is not:
 
-```
+```bash
 Host : localhost:42069
 ```
 
-## Header Parser — My Learning
+### Header Parser — My Learning
 
 Creating the Headers parser gave me quite a few hiccups — I was stuck for a long time.
 
@@ -555,7 +555,7 @@ Here’s how I approached it:
 
 - While reading, I check for CRLF in the current unparsed slice:
 
-```
+```go
 i := bytes.Index(data[read:], rn)
 if i == -1 {
     break // need more data
@@ -572,7 +572,7 @@ if i == -1 {
 
 - If we find an empty line (i.e., i == 0), it means we’ve reached the end of headers:
 
-```
+```go
 if i == 0 {
     done = true
     read += len(rn)
@@ -587,7 +587,7 @@ if i == 0 {
 
 - We take one header line from the buffer:
 
-```
+```go
 name, value, err := parseHeader(data[read:read+i])
 if err != nil {
 return 0, false, err
@@ -600,36 +600,36 @@ return 0, false, err
 
 - Then we advance the read pointer:
 
-```
+```go
 read += i + len(rn) // move past this line
 ```
 
 - After parsing, we store the header in the map:
 
-```
+```go
 h[name] = value
 ```
 
 Example:
 
-```
+```go
 h["Host"] = "example.com"
 h["User-Agent"] = "curl/8.0"
 ```
 
-## Constraints
+### Constraints
 
 The header parsing mostly working but not according to RFC
 
-### Case Insensitivity
+#### Case Insensitivity
 
 Field names are case-insensitive so Content-Length and content-length are the same and we have to account for this.
 
-### Valid Characters
+#### Valid Characters
 
 Field-name has implicit definition of a token, as defined in RFC 9110, TOken are short textual identifiers that do not include whitespace or delimiters.
 
-```
+```bash
 token          = 1*tchar
 
   tchar          = "!" / "#" / "$" / "%" / "&" / "'" / "*"
@@ -645,17 +645,17 @@ so, a `field-name` must only contain:
 - Digits: 0-9
 - Special characters: ``!, #, $, %, &, ', *, +, -, ., ^, _, `, |, ~``
 
-## Multiple Values
+### Multiple Values
 
 According to RFC: 9110, in **[5.2](https://datatracker.ietf.org/doc/html/rfc9110#name-field-lines-and-combined-fi)** it is mentioned, that its is perfectly valid to have multiple values for single header key.
 for example:
 
-```
+```bash
 Example-Field: Foo, Bar
 Example-Field: Baz
 ```
 
-## Add to Parse
+### Add to Parse
 
 While adding to my Parse function, I ran into a few problems , similar to what the video course showed — where my code panicked multiple times.
 
@@ -665,11 +665,11 @@ The causes were tiny mistakes, like:
 
 - Miscalculating the number of bytes to slice
 
-### Using slog for Debugging
+#### Using slog for Debugging
 
 I discovered slog for structured logging, which I found very helpful. I used it multiple times in my code to debug issues like this:
 
-```
+```go
 // debugging
 slog.Info("Read from reader",
     "n", n,
@@ -695,11 +695,11 @@ if readN > bufLen {
 
 - After parsing, the second log checks if `parse` returned more bytes than the buffer length, which could indicate a bug.
 
-### What I Learned
+#### What I Learned
 
 The panic happened because of Go slice rules:
 
-```
+```go
 buf[:bufLen+n] // This caused panic
 ```
 
@@ -711,7 +711,7 @@ In simple terms:
 
 > My start index was greater than my end index because I incremented `bufLen` before slicing and then added `n` again.
 
-## Live headers
+### Live headers
 
 I was starting to really understand how HTTP headers work, how they are parsed, and what constraints they must follow according to the RFCs.
 
@@ -730,7 +730,7 @@ This was the moment everything clicked:
 
 I got full insight into why headers are structured the way they are, and how incremental parsing, CRLF detection, and buffer management all work together.
 
-# CHAPTER 6: HTTP Body
+## CHAPTER 6: HTTP Body
 
 An HTTP/1.1 message consists of:
 
@@ -742,7 +742,7 @@ An HTTP/1.1 message consists of:
 
 From the RFC:
 
-```
+```bash
   HTTP-message   = start-line CRLF
                    *( field-line CRLF )
                    CRLF
@@ -773,7 +773,7 @@ In my Implementation:
 - If there is no `Content-Length` header -> I assume there is **no body**.
 - If `Content-Length` exists -> I must read exactly the many bytes
 
-## Setup
+### Setup
 
 To support body parsing:
 
@@ -783,7 +783,7 @@ To support body parsing:
 
 Code:
 
-```
+```go
 type Request struct {
     RequestLine RequestLine
     Headers     Headers
@@ -792,7 +792,7 @@ type Request struct {
 }
 ```
 
-## Parsing Strategy
+### Parsing Strategy
 
 1. Parse headers.
 2. Extract Content-Length using GetInt.
@@ -809,9 +809,9 @@ Because TCP is a stream:
 - I might not receive the entire body in one read.
 - I must handle partial body reads.
 
-## Core Logic
+### Core Logic
 
-```
+```go
 remainingData := min(length - len(r.Body), len(currentData))
 ```
 
@@ -830,11 +830,11 @@ where:
   - I never read more than what i currently have
   - I respect exact body size defined by `Content-Length`
 
-### Example
+#### Example
 
 suppose:
 
-```
+```bash
 Content-Length: 10
 ```
 
@@ -842,14 +842,14 @@ Content-Length: 10
 
 Get 6 bytes:
 
-```
+```bash
 len(r.Body) = 0
 len(currentData) = 6
 ```
 
 so:
 
-```
+```bash
 length - len(r.Body) = 10 - 0 = 10
 min(10, 6) = 6
 ```
@@ -858,14 +858,14 @@ min(10, 6) = 6
 
 I get 10 more bytes:
 
-```
+```bash
 len(r.Body)  = 0
 len(currentData) = 10
 ```
 
 Now:
 
-```
+```bash
 length - len(r.Boy) = 10 - 6 = 4
 min(4, 10) = 4
 ```
@@ -873,9 +873,9 @@ min(4, 10) = 4
 you ony append 4 bytes. Even though i received 10 bytes
 Because the body should only be 10 total
 
-## Appending the Body
+### Appending the Body
 
-```
+```go
 r.Body = append(r.Body, currentData[:remainingData]...)
 ```
 
@@ -885,7 +885,7 @@ Why This?:
 - Converting to string is unnecessary.
 - `append` avoids extra allocations and conversions
 
-# CHAPTER 7: HTTP Response
+## CHAPTER 7: HTTP Response
 
 Now I understand what an HTTP request is.
 
@@ -899,7 +899,7 @@ When a client sends a request, it travels through multiple layers of the network
 
 Example HTTP request
 
-```
+```bash
 GET /coffee.html HTTP/1.1
 User-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)
 Host: www.coffee.com
@@ -942,7 +942,7 @@ When the request reaches the server:
 
 After processing, the server sends back a `response`.
 
-## HTTP Response structure
+### HTTP Response structure
 
 An HTTP response has a very similar structure:
 
@@ -956,7 +956,7 @@ An HTTP response has a very similar structure:
 
 Example:
 
-```
+```bash
 HTTP/1.1 200 OK
 Accept-Ranges: bytes
 Age: 294510
@@ -985,12 +985,12 @@ Common status codes:
 
 **The Request/Response Model:**
 
-```
+```bash
 Client → HTTP Request → Server
 Server → HTTP Response → Client
 ```
 
-## Server
+### Server
 
 Now I am upgrading from a simple `tcplistener` to an actual `httpserver.`
 
@@ -1008,11 +1008,11 @@ Building a server that:
 - Parses them correctly
 - Sends back valid HTTP responses
 
-### Server Setup
+#### Server Setup
 
 I was given `cmd/httpserver/main.go` file:
 
-```
+```go
 const port = 42069
 
 func main() {
@@ -1036,15 +1036,15 @@ This file:
 - waits for the system signals(`SIGINT`/`SIGTERM`) to gracefully stop
 - Calls `server.Close()` on exit
 
-### creating server
+#### creating server
 
 Inside my `server` package, i implemented following things:
 
 1. `type Server struct`
 
-```
+```go
 type Server struct {
-	listener net.Listener
+  listener net.Listener
 }
   - Keeps track of the server state
   - stores the TCP listener
@@ -1052,7 +1052,7 @@ type Server struct {
 
 2. `func Serve(port int) (*server, error)`
 
-```
+```go
 func Serve(port int) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -1080,7 +1080,7 @@ func Serve(port int) (*Server, error) {
 
 4. `func (s *Server) listen()`
 
-```
+```go
 func (s *Server) Listen() {
 	for {
 		conn, err := s.listener.Accept()
@@ -1099,7 +1099,7 @@ func (s *Server) Listen() {
 
 5. `func (s *Server) handle(conn net.Conn)` -
 
-```
+```go
 func (s *Server) handle(conn net.Conn) {
 	out := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nHello World!")
 	conn.Write(out)
@@ -1114,7 +1114,126 @@ func (s *Server) handle(conn net.Conn) {
 
 > As of in this stage, i am hard coding the response msg, in future will add dynamic responses
 
-# Mistakes & Realizations
+### Response
+
+An HTTP response follows the sme overall HTTP message format:
+
+```bash
+HTTP-message   = start-line CRLF
+                 *( field-line CRLF )
+                 CRLF
+                 [ message-body ]
+```
+
+#### status line
+
+The status line has the following structure:
+
+```bash
+status-line = HTTP-version SP status-code SP [ reason-phrase ]
+```
+
+Examples:
+
+```bash
+HTTP/1.1 200 OK
+```
+
+```bash
+HTTP/1.1 404 Not Found
+```
+
+> A server MUST send the space that separates the status code from the phrase
+>
+> Even if the reason phrase is empty, the trailing space after the status code must still be present
+
+##### my Implementation
+
+At this stage, i implemented `StatusCode` enum-like type supporting:
+
+- `200`
+- `400`
+- `500`
+
+#### writing the Status line
+
+I used a `switch` on the status code and wrote the raw bytes:
+
+```go
+func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+  switch statusCode {
+  case StatusOK:
+    _, err := w.Write([]byte("HTTP/1.1 200 OK\r\n"))
+    return err
+  // other cases...
+  }
+}
+```
+
+Current approach:
+
+- Hard-coded reason phrase
+- writes directly to the provided writer
+- keep things simple for now
+
+#### Writing Headers
+
+After the status line, the server must write the headers(field lines)
+I implemented a helper that iterates through my header collection using `ForEach` and formats each header line:
+
+```go
+func WriteHeaders(w io.Writer, headers headers.Headers) error {
+	b := []byte{}
+	headers.ForEach(func(n, v string) {
+		b = fmt.Appendf(b, "%s: %s\r\n", n, v)
+	})
+	b = fmt.Append(b, "\r\n")
+	_, err := w.Write(b)
+	return err
+}
+```
+
+what this does:
+
+- Iterates overall headers
+- formats each headers as
+
+```bash
+  Name: Value\r\n
+```
+
+#### Other Common Headers
+
+Besides the core headers i implemented there are several other important HTTP headers as well:
+
+- **Content-Encoding:**
+  Indicates whether the response body has been encoded or compressed (for example: gzip, br).
+  If present, the client must decode the body using the specified encoding before using the content.
+
+- **Date:**
+  Specifies the date and time at which the message was generated by the server.
+  This helps clients and intermediaries understand response freshness and is commonly included in HTTP responses.
+
+- **Cache-Control:**
+  Provides directives that control how the response may be cached by browsers and intermediary caches.
+  It is useful for defining caching behavior such as:
+  - whether the response can be cached
+
+  - how long it stays fresh (max-age)
+
+  - whether revalidation is required
+
+#### Flow so far
+
+At this point server response flow is:
+
+- write status line
+- Write headers
+- (next step) write body
+
+Right now the server is still fairly low-level and manual, but it correctly follows the HTTP message structure.
+
+## Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
 - Thought UDP might be "unreliable" for all small messages → realized some apps handle reliability at the application layer.
@@ -1124,7 +1243,7 @@ func (s *Server) handle(conn net.Conn) {
 - Confused "pull vs push" → really about synchronous (files) vs asynchronous (network) data availability
 - Initially said "TCP splits into packets" → learned TCP creates segments, IP creates packets
 
-**Chapter 5**
+**Chapter 5**:
 
 Lesson 1
 
@@ -1141,7 +1260,7 @@ Lesson 4
 - Structured logging (slog) is incredibly useful for debugging incremental parsing.
 - Small mistakes (extra space, wrong byte count) can cause panics in network parsers.
 
-**Chapter 6**
+**Chapter 6**:
 
 - Parsing the body is different from parsing headers:
   - Headers are line-based
@@ -1149,7 +1268,7 @@ Lesson 4
 - Headers stop at `\r\n\r\n`, Body stops at exact byte count
 - Header is delimiter-base and Body is length-based
 
-**Chapter 7**
+**Chapter 7**:
 
 - In a request, the first line is called **request line**
   In a response, the first line is called **status line** and it contains:
@@ -1158,7 +1277,7 @@ Lesson 4
   - Reason phrase
 - The request and response share the same high-level structure
 
-# Security Insights
+## Security Insights
 
 - TCP’s connection-oriented nature is reliable, but also vulnerable to SYN flood attacks.
 - Partial read handling is important to prevent buffer overflows or request smuggling.
