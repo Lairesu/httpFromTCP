@@ -93,6 +93,16 @@ func (h *Headers) ForEach(cb func(n, v string)) {
 		cb(n, v)
 	}
 }
+
+// This is old Set
+func (h *Headers) Add(name, value string) {
+	name = strings.ToLower(name)
+	if existing, ok := h.headers[name]; ok && existing != "" {
+		h.headers[name] = existing + "," + value
+	} else {
+		h.headers[name] = value
+	}
+}
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	read := 0
 	done := false
@@ -121,7 +131,7 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 		read += i + len(rn)
 
 		// field-name are case insensitivity
-		h.Set(name, value)
+		h.Add(name, value)
 	}
 
 	return read, done, nil
