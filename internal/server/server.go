@@ -1,11 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
-	"io"
 	"net"
 )
 
@@ -14,7 +12,7 @@ type HandlerError struct {
 	Message    string
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
 type Server struct {
 	listener net.Listener
 	closed   bool
@@ -38,14 +36,19 @@ func Serve(port int, handler Handler) (*Server, error) {
 }
 
 func (s *Server) Close() error {
-	return nil
+	s.closed = true
+	return s.listener.Close()
 }
 
 func (s *Server) Listen() {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			return
+			if s.closed {
+				return
+			}
+			fmt.Println("accept error: ", err)
+			continue
 		}
 		go s.handle(conn)
 	}
@@ -53,33 +56,13 @@ func (s *Server) Listen() {
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
 
+	responseWriter := response.NewWriter(conn)
 	headers := response.GetDefaultHeaders(0)
-
 	r, err := request.RequestFromReader(conn)
 	if err != nil {
-		response.WriteStatusLine(conn, response.StatusBadRequest)
-		response.WriteHeaders(conn, *headers)
+		responseWriter.WriteStatusLine(response.StatusBadRequest)
+		responseWriter.WriteHeaders(*headers)
 		return
 	}
-
-	writer := bytes.NewBuffer([]byte{})
-	handlerError := s.handler(writer, r)
-	if handlerError != nil {
-		// updating the body and Content-Length
-		body := []byte(handlerError.Message)
-		headers.Set("Content-Length", fmt.Sprintf("%d", len(body)))
-
-		response.WriteStatusLine(conn, handlerError.StatusCode)
-		response.WriteHeaders(conn, *headers)
-		conn.Write(body)
-		return
-	}
-
-	// 200 OK PATH
-	body := writer.Bytes()
-	headers.Set("Content-Length", fmt.Sprintf("%d", len(body)))
-
-	response.WriteStatusLine(conn, response.StatusOK)
-	response.WriteHeaders(conn, *headers)
-	conn.Write(body)
+	s.handler(responseWriter, r)
 }

@@ -26,28 +26,66 @@ func GetDefaultHeaders(contentLen int) *headers.Headers {
 	return h
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+// creating our own writer
+type writerState int
+
+const (
+	stateStatusLine writerState = iota
+	stateHeaders
+	stateBody
+	stateDone
+)
+
+type Writer struct {
+	writer io.Writer
+	state  writerState
+}
+
+func NewWriter(writer io.Writer) *Writer {
+	return &Writer{writer: writer, state: stateStatusLine}
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.state != stateStatusLine {
+		return fmt.Errorf("cannot write status line in current state")
+	}
+	switch statusCode {
+	case StatusOK:
+		_, err := w.writer.Write([]byte("HTTP/1.1 200 OK\r\n"))
+		w.state = stateHeaders
+		return err
+	case StatusBadRequest:
+		_, err := w.writer.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
+		w.state = stateHeaders
+		return err
+	case StatusInternalServerError:
+		_, err := w.writer.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
+		w.state = stateHeaders
+		return err
+	default:
+		return fmt.Errorf("Great, you found new Status. Unrecognized error code")
+	}
+}
+
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.state != stateHeaders {
+		return fmt.Errorf("cannot write headers in current state")
+	}
 	b := []byte{}
 	headers.ForEach(func(n, v string) {
 		b = fmt.Appendf(b, "%s: %s\r\n", n, v)
 	})
 	b = fmt.Append(b, "\r\n")
-	_, err := w.Write(b)
+	_, err := w.writer.Write(b)
+	w.state = stateBody
 	return err
 }
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
-	switch statusCode {
-	case StatusOK:
-		_, err := w.Write([]byte("HTTP/1.1 200 OK\r\n"))
-		return err
-	case StatusBadRequest:
-		_, err := w.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
-		return err
-	case StatusInternalServerError:
-		_, err := w.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
-		return err
-	default:
-		return fmt.Errorf("Great, you found new Status. Unrecognized error code")
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.state != stateBody {
+		return 0, fmt.Errorf("cannot write body in current state")
 	}
+	n, err := w.writer.Write(p)
+	w.state = stateDone
+	return n, err
 }
