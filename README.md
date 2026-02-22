@@ -1,41 +1,46 @@
 # TCP to HTTP Course Project
 
-## This repository contains my personal course project from boot.dev
+This repository contains my personal course project from boot.dev
 
-
-## Note: This is not an original project.
+> Note: This is not an original project.
 
 ### I am learning everything step by step and keeping detailed notes in LEARNING.md.
 
 ### This is not a simple copy-paste; all implementations reflect my understanding as I progress through the lessons.
-```
-File Structure
-./
-├── cmd/
-│   ├── tcplistener/
-│   │   └── main.go
-│   └── udpsender/
-│       └── main.go
+
+```bash
+├── cmd
+│   ├── httpserver
+│   │   └── main.go
+│   ├── tcplistener
+│   │   └── main.go
+│   └── udpsender
+│       └── main.go
 ├── go.mod
 ├── go.sum
-├── Images/
-│   ├── tcpudp.jpg
-│   └── TCPvsUDP.jpeg
-├── internal/
-│   ├── headers/
-│   │   ├── headers.go
-│   │   └── headers_test.go
-│   └── request/
-│       ├── request.go
-│       └── request_test.go
+├── Images
+│   ├── tcpudp.jpg
+│   └── TCPvsUDP.jpeg
+├── internal
+│   ├── headers
+│   │   ├── headers.go
+│   │   └── headers_test.go
+│   ├── request
+│   │   ├── request.go
+│   │   └── request_test.go
+│   ├── response
+│   │   └── response.go
+│   └── server
+│       └── server.go
 ├── LEARNING.md
 ├── messages.txt
 └── README.md
 ```
-# Acknowledgements
->
+
+## Acknowledgements
+
 > Thanks to boot.dev
 >
->for this course and the structured exercises.
+> for this course and the structured exercises.
 >
->This project exists as a learning tool, helping me understand TCP, HTTP, and Go network programming in depth.
+> This project exists as a learning tool, helping me understand TCP, HTTP, and Go network programming in depth.

@@ -59,6 +59,7 @@ func main() {
 			status = response.StatusInternalServerError
 		}
 		h.Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		h.Set("Content-Type", "text/html")
 		w.WriteStatusLine(status)
 		w.WriteHeaders(*h)
 		w.WriteBody(body)
