@@ -1348,6 +1348,202 @@ func main() {
 > The `Handler` is responsible for reporting errors or writing the
 > body.
 
+### Refactor
+
+As mentioned in the course, the previous design constraining the library:
+
+- Errors were always returned as plain text
+- Headers were always the same
+- Users had limited control over the response
+
+To fix this, the handler signature needed to be more flexible.
+
+Previously:
+
+```go
+type Handler func(w io.Writer, req *request.Request) *HandlerError
+```
+
+New Design
+
+```go
+type Handler func(w *response.Writer, req *request.Request)
+```
+
+Now the handler receives a custom response.Writer, which gives full control over:
+
+- Status line
+- Headers
+- Body
+
+This encapsulates boilerplate while giving users flexibility.
+
+#### Goal of the Refactor
+
+The main goal was to allow the `httpserver` to return HTML responses instead of being locked to plain text.
+
+To achieve this:
+
+- Stop depending directly on io.Writer
+- Create a custom response writer
+- Let handlers fully control the HTTP response
+
+#### response.Writer
+
+**struct**
+
+```Go
+type Writer struct {
+	writer io.Writer
+	state  writerState
+}
+```
+
+**Purpose:**
+
+- writer → underlying connection
+- state → enforces correct write order using a state machine
+
+This prevents invalid HTTP responses.
+
+**WriteStatusLine**
+
+```Go
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.state != stateStatusLine {
+		return fmt.Errorf("cannot write status line in current state")
+	}
+	switch statusCode {
+	case StatusOK:
+		_, err := w.writer.Write([]byte("HTTP/1.1 200 OK\r\n"))
+		w.state = stateHeaders
+		return err
+	case StatusBadRequest:
+		_, err := w.writer.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
+		w.state = stateHeaders
+		return err
+	case StatusInternalServerError:
+		_, err := w.writer.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
+		w.state = stateHeaders
+		return err
+	default:
+		return fmt.Errorf("Great, you found new Status. Unrecognized error code")
+	}
+}
+```
+
+**What it does**:
+
+- Writes the HTTP status line
+- Advances state → stateHeaders
+- Prevents writing status line twice
+
+**WriteHeaders**
+
+```Go
+
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.state != stateHeaders {
+		return fmt.Errorf("cannot write headers in current state")
+	}
+	b := []byte{}
+	headers.ForEach(func(n, v string) {
+		b = fmt.Appendf(b, "%s: %s\r\n", n, v)
+	})
+	b = fmt.Append(b, "\r\n")
+	_, err := w.writer.Write(b)
+	w.state = stateBody
+	return err
+}
+```
+
+**What it does**:
+
+- Formats header field lines
+- Writes the blank line after headers
+- Moves state → stateBody
+
+**WriteBody**
+
+```Go
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.state != stateBody {
+		return 0, fmt.Errorf("cannot write body in current state")
+	}
+	n, err := w.writer.Write(p)
+	w.state = stateDone
+	return n, err
+}
+
+```
+
+**Important:**
+
+- p is the payload (body bytes)
+- Ensures body is written only at the correct time
+- Moves state → stateDone
+
+#### Updated Server handle
+
+```Go
+func (s *Server) handle(conn net.Conn) {
+	defer conn.Close()
+
+	responseWriter := response.NewWriter(conn)
+	headers := response.GetDefaultHeaders(0)
+	r, err := request.RequestFromReader(conn)
+	if err != nil {
+		responseWriter.WriteStatusLine(response.StatusBadRequest)
+		responseWriter.WriteHeaders(*headers)
+		return
+	}
+	s.handler(responseWriter, r)
+}
+
+```
+
+**Flow**:
+
+- Create response writer
+- Parse request
+- On parse error → send 400
+- Otherwise → delegate to handler
+
+#### Update main Handler
+
+```Go
+func main() {
+	server, err := server.Serve(port, func(w *response.Writer, req *request.Request) {
+		h := response.GetDefaultHeaders(0)
+		body := body200()
+		status := response.StatusOK
+
+		if req.RequestLine.RequestTarget == "/yourproblem" {
+			body = body400()
+			status = response.StatusBadRequest
+		} else if req.RequestLine.RequestTarget == "/myproblem" {
+			body = body500()
+			status = response.StatusInternalServerError
+		}
+		h.Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		h.Set("Content-Type", "text/html")
+		w.WriteStatusLine(status)
+		w.WriteHeaders(*h)
+		w.WriteBody(body)
+	})
+  ...
+}
+```
+
+### Key Realization
+
+This refactor:
+
+- Removes rigid server behavior
+- Gives full response control to the handler
+- Keeps protocol correctness via the state machine
+- Makes the server feel much closer to real HTTP servers
+
 ## Mistakes & Realizations
 
 - Initially assumed each `Read()` returns a full message → wrong, learned TCP is stream-based.
