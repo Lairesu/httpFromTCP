@@ -1537,7 +1537,90 @@ func main() {
 
 ## CHAPTER 8: Chunk Encoding
 
+At this point, I assumed HTTP messages were parsed and sent as a single block of data. This works fine for many use cases, but what if I want to send updates bit by bit?
 
+then i Remember the basic structure of an `HTTP message`:
+
+```zsh
+     HTTP-message   = start-line CRLF
+                      *( field-line CRLF )
+                      CRLF
+                      [ message-body ]
+```
+
+The `[message-body]` can be flexible. Instead of using `Content-Length`, HTTP allows sending the body in chunks using the `Transfer-Encoding: chunked` header.
+
+### chunked transfer-Encoding
+
+Format of a chunked response
+
+```bash
+HTTP/1.1 200 OK
+Content-Type: text/plain
+Transfer-Encoding: chunked
+
+<n>\r\n
+<data of length n>\r\n
+<n>\r\n
+<data of length n>\r\n
+<n>\r\n
+<data of length n>\r\n
+<n>\r\n
+<data of length n>\r\n
+... repeat ...
+0\r\n
+\r\n
+```
+
+- `<n>` → hexadecimal number indicating the size of the chunk in bytes
+- `<data of length n>` → the actual data of that chunk
+- Repeat until all data is sent
+- Last chunk has size 0 followed by an empty line (\r\n) to indicate end of message
+
+### Example: Plain Text Response
+
+```bash
+HTTP/1.1 200 OK
+Content-Type: text/plain
+Transfer-Encoding: chunked
+
+1E
+I could go for a cup of coffee
+C
+But not Java
+12
+Never go full Java
+0
+```
+
+- 1E → 30 bytes
+- C → 12 bytes
+- 12 → 18 bytes
+- 0 → signals end of body
+
+Chunked encoding is most often used for:
+
+- streaming large amount of data (like big files)
+- real-time updates(like chat-style application)
+- sending data of unknown size(like a live feed)
+
+### chunk Format
+
+In RFC 9112, section 7.1
+
+each chunk looks like this:
+
+```bash
+chunk-size [chunk-extension] CRLF
+chunk-data
+CRLF
+```
+
+- `chunk-size` → hexadecimal number representing chunk length
+- `chunk-extension` → optional, rarely used
+- `chunk-data` → the actual bytes of this chunk
+
+This allows HTTP to send messages incrementally without knowing the total size in advance.
 
 ### Key Realization
 
