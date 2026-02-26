@@ -77,15 +77,16 @@ func main() {
 				for {
 					n, err := res.Body.Read(buf)
 					if n > 0 {
-						w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
-						w.WriteBody(buf[:n])
-						w.WriteBody([]byte("\r\n"))
+						// w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
+						// w.WriteBody(buf[:n])
+						// w.WriteBody([]byte("\r\n"))
+						w.WriteChunkedBody(buf[:n])
 					}
 					if err != nil {
 						break
 					}
 				}
-				w.WriteBody([]byte("0\r\n\r\n"))
+				w.WriteChunkedBodyDone()
 				return
 			}
 		}
@@ -107,4 +108,3 @@ func main() {
 	<-sigChan
 	log.Println("Server gracefully stopped")
 }
-
