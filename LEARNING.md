@@ -1622,14 +1622,97 @@ CRLF
 
 This allows HTTP to send messages incrementally without knowing the total size in advance.
 
-### Key Realization
+### Implementation of chunked Encoding:
 
-This refactor:
+To support sending chunked responses, I added two methods to the response package:
 
-- Removes rigid server behavior
-- Gives full response control to the handler
-- Keeps protocol correctness via the state machine
-- Makes the server feel much closer to real HTTP servers
+- `func (w *Writer) WriteChunkedBody(p []byte) (int, error)` → writes a single chunk
+
+- `func (w *Writer) WriteChunkedBodyDone() (int, error)` → writes the final zero-length chunk to signal the end
+
+For `WriteChunkedBody`:
+
+1. make sure we are in body sate
+2. writing the chunking size in hex, followed by `CRLF`
+
+```go
+	n := len(p)
+	_, err := w.writer.Write([]byte(fmt.Sprintf("%x\r\n", n)))
+	if err != nil {
+		return 0, err
+	}
+```
+
+3. write the actual chunk itself
+
+```go
+	_, err = w.writer.Write(p)
+	if err != nil {
+		return 0, nil
+	}
+```
+
+4. printing the CRLF after the chunk
+
+```go
+	_, err = w.writer.Write([]byte("\r\n"))
+	if err != nil {
+		return 0, err
+	}
+```
+
+For `writeChunkedBodyDone`:
+
+1. check if we are in body state
+2. write the final zero-length chunk with trailer
+
+```go
+	n, err := w.writer.Write([]byte("0\r\n\r\n"))
+	if err != nil {
+		return n, err
+	}
+```
+
+**Updating the Server to Use Chunked ResponsesUpdate the `server`**:
+
+1. Check if the request target starts with /httpbin/stream.
+2. Build the external URL using the request target:
+
+```go
+target := req.RequestLine.RequestTarget
+res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])
+```
+
+3. If there is an error, send a `500 Internal Server Error`. Otherwise:
+
+- Write the status line (`200 OK`)
+- Delete `Content-Length` and add `Transfer-Encoding: chunked`
+- `Set Content-Type`
+- Write headers
+
+4. Read from the external response in a loop using a small buffer, writing each chunk with `WriteChunkedBody`:
+
+```go
+buf := make([]byte, 32)
+for {
+    n, err := res.Body.Read(buf)
+    if n > 0 {
+        w.WriteChunkedBody(buf[:n])
+    }
+    if err != nil {
+        break
+    }
+}
+```
+
+5. After all chunks are sent, call `WriteChunkedBodyDone()`
+
+```go
+w.WriteChunkedBodyDone()
+return
+```
+
+This way, the server can stream data to the client incrementally, without knowing the total size in advance.
 
 ## Mistakes & Realizations
 
