@@ -86,6 +86,48 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 		return 0, fmt.Errorf("cannot write body in current state")
 	}
 	n, err := w.writer.Write(p)
-	w.state = stateDone
 	return n, err
+}
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	if w.state != stateBody {
+		return 0, fmt.Errorf("cannot write chunked body in current state")
+	}
+
+	// writing chunk size in hex
+	n := len(p)
+	_, err := w.writer.Write([]byte(fmt.Sprintf("%x\r\n", n)))
+	if err != nil {
+		return 0, err
+	}
+
+	// write the chunk itself
+	_, err = w.writer.Write(p)
+	if err != nil {
+		return 0, nil
+	}
+
+	// CRLF after chunk
+	_, err = w.writer.Write([]byte("\r\n"))
+	if err != nil {
+		return 0, err
+	}
+
+	// return length of data
+	return n, nil
+}
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	if w.state != stateBody {
+		return 0, fmt.Errorf("cannot finish chunked body in current state")
+	}
+
+	// write final zero-length chunk
+	n, err := w.writer.Write([]byte("0\r\n\r\n"))
+	if err != nil {
+		return n, err
+	}
+
+	// mark state done
+	w.state = stateDone
+	return n, nil
 }

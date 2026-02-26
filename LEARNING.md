@@ -1535,6 +1535,10 @@ func main() {
 }
 ```
 
+## CHAPTER 8: Chunk Encoding
+
+
+
 ### Key Realization
 
 This refactor:

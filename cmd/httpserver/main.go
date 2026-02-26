@@ -6,8 +6,10 @@ import (
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -57,6 +59,35 @@ func main() {
 		} else if req.RequestLine.RequestTarget == "/myproblem" {
 			body = body500()
 			status = response.StatusInternalServerError
+		} else if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/stream") {
+			target := req.RequestLine.RequestTarget
+			res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])
+			if err != nil {
+				body = body500()
+				status = response.StatusInternalServerError
+			} else {
+				w.WriteStatusLine(response.StatusOK)
+
+				h.Delete("Content-length")
+				h.Set("transfer-encoding", "chunked")
+				h.Set("content-type", "text/plain")
+				w.WriteHeaders(*h)
+
+				buf := make([]byte, 32)
+				for {
+					n, err := res.Body.Read(buf)
+					if n > 0 {
+						w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
+						w.WriteBody(buf[:n])
+						w.WriteBody([]byte("\r\n"))
+					}
+					if err != nil {
+						break
+					}
+				}
+				w.WriteBody([]byte("0\r\n\r\n"))
+				return
+			}
 		}
 		h.Set("Content-Length", fmt.Sprintf("%d", len(body)))
 		h.Set("Content-Type", "text/html")
@@ -76,3 +107,4 @@ func main() {
 	<-sigChan
 	log.Println("Server gracefully stopped")
 }
+
